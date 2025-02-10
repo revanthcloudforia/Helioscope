@@ -1,0 +1,7 @@
+{
+  "redeploymentEnabled": true,
+  "minMuleVersion": "4.4.0",
+  "javaSpecificationVersions": [
+    "1.8"
+  ]
+}

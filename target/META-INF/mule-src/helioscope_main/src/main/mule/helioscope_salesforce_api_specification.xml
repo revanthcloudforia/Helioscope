@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+	<flow name="helioscope_salesforce_api_project_flow" doc:id="6842c9b4-629f-49ce-969f-90f9bb695d61" >
+		<http:listener doc:name="Listener" doc:id="7d97d6d5-45d3-4bfc-9099-f291c8c88c36" config-ref="HTTP_Listener_config" path="/project"/>
+		<flow-ref doc:name="Project Flow" doc:id="35d77553-72d9-474d-a189-d88c719b2e0c" name="helioscope_mainFlow"/>
+	</flow>
+	<flow name="helioscope_salesforce_designs_flow" doc:id="831e2cfe-2355-41f8-88b5-d47d785657b1" >
+		<http:listener doc:name="Listener" doc:id="b97168d1-5521-4117-9db0-960dcf4d049b" config-ref="HTTP_Listener_config" path="/designdelta" />
+		<flow-ref doc:name="Design Flow" doc:id="06d960a4-2fe2-455d-a1b9-b33c571c1ee1" name="helioscope_Designs" />
+	</flow>
+	<flow name="helioscope_projectdelta" doc:id="51f6411d-e0fc-421c-9835-8934ee9f175f" >
+		<http:listener doc:name="Listener" doc:id="3f2f6c2b-9c5d-4f8e-bb55-a196d10ec59a" config-ref="HTTP_Listener_config" path="/projectdelta"/>
+		<flow-ref doc:name="helioscope_project_delta" doc:id="a99a6ed9-c7d8-44f7-a0ca-34187f3e196e" name="helioscope_project_delta"/>
+	</flow>
+</mule>

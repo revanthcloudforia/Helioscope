@@ -1,0 +1,40 @@
+{
+  "configs": [
+    "config/gobal-secure-config.xml",
+    "helioscope_salesforce_api_specification.xml",
+    "Implementation/helioscope_main.xml",
+    "config/global-config.xml"
+  ],
+  "secureProperties": [],
+  "supportedJavaVersions": [],
+  "redeploymentEnabled": true,
+  "name": "com.mycompany:helioscope_main:1.0.0-SNAPSHOT",
+  "minMuleVersion": "4.4.0",
+  "requiredProduct": "MULE_EE",
+  "classLoaderModelLoaderDescriptor": {
+    "id": "mule",
+    "attributes": {
+      "exportedPackages": [],
+      "exportedResources": [
+        "application-types.xml",
+        "config/config-dev.yaml",
+        "config/config-prod.yaml",
+        "config/config-secure-dev.yaml",
+        "config/config-secure-prod.yaml",
+        "config/config-secure-stage.yaml",
+        "config/config-stage.yaml",
+        "config/config.yaml",
+        "config/global-config.xml",
+        "config/gobal-secure-config.xml",
+        "helioscope_salesforce_api_specification.xml",
+        "Implementation/helioscope_main.xml",
+        "keystore.jks",
+        "log4j2.xml"
+      ]
+    }
+  },
+  "bundleDescriptorLoader": {
+    "id": "mule",
+    "attributes": {}
+  }
+}
