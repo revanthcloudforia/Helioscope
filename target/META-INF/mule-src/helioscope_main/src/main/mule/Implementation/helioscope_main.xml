@@ -1,0 +1,366 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd">
+	<http:request-config
+		name="HTTP_Request_configuration"
+		doc:name="HTTP Request configuration"
+		doc:id="d295c66e-4e95-4aeb-8a79-41b700af2a61" basePath="/api">
+		<http:request-connection
+			host="app.helioscope.com" protocol="HTTPS" port="443" />
+	</http:request-config>
+	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="9f8ba174-891d-45e1-925a-358f7f3fe270" >
+		<salesforce:basic-connection username="mulesoft@baker-electric.com" password="Baker@1232" securityToken="AW0LvK7TR7LzKwvZMszQZQo8" url="https://login.salesforce.com/services/Soap/u/60" />
+	</salesforce:sfdc-config>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="19d298cb-197b-4cc9-b5f5-4e876f6b7730" >
+		<http:listener-connection host="0.0.0.0" port="8081">
+		</http:listener-connection>
+	</http:listener-config>
+	<flow name="helioscope_mainFlow"
+		doc:id="3a981774-2462-4586-baec-ce4482fc717d">
+		<scheduler doc:name="Scheduler" doc:id="43696b8e-9041-4f98-acf5-4e72195b760f" >
+			<scheduling-strategy >
+				<fixed-frequency startDelay="2" timeUnit="HOURS"/>
+			</scheduling-strategy>
+		</scheduler>
+		<logger level="INFO" doc:name="projects process is started" doc:id="c8adcb23-e051-4f17-9e86-cbb3051ee3bd" message='#["Project Flow Started"]'/>
+		<until-successful maxRetries="5" doc:name="Until Successful" doc:id="33202930-c341-4b5c-a12f-726d3992e825">
+				<http:request method="GET" doc:name="Helioscope api request to get projects" doc:id="df3c10ec-1960-4679-b5ce-b86049321993" config-ref="HTTP_Request_configuration" path="/projects/?offset=0&amp;limit=5000" sendCorrelationId="AUTO">
+				<http:headers><![CDATA[#[output application/java
+					---
+					{
+					"access_token": "${secure::helioscope.access_token}"
+					}]]]>
+				</http:headers>
+			</http:request>
+		</until-successful>
+		<ee:transform doc:name="Transform Message" doc:id="af83ba1d-418d-4afd-aa78-16263af7067e">
+			<ee:message>
+			</ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="project"><![CDATA[%dw 2.0
+output application/java
+---
+payload map {
+helioscope_project_api_id__c: $.project_id as String,
+Name: $.name,
+PreparedByEmail__c :  $.creator.email,
+DateHelioProjectCreated__c	: $.created as DateTime as Date {format: "MM/dd/yyyy"},
+helioscope_project_address__c: $.address,
+project_data_json__c: write($, "application/json")					  
+}
+					]]>
+				</ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<foreach doc:name="For Each to process 200 records at once" doc:id="bbbbc003-64a7-439e-8388-59266b5f9736" collection="#[vars.project]" batchSize="200">
+			<until-successful maxRetries="5" doc:name="Until Successful" doc:id="e603ff8e-9257-4d83-aa64-8837070e8ab1">
+				<salesforce:upsert doc:name="Upsert projects into salesforce" doc:id="860e448a-038d-459d-8f70-ec015f0ee8c2" config-ref="Salesforce_Config" externalIdFieldName="helioscope_project_api_id__c" objectType="Helioscope_Project__c" target="responsesf">
+				</salesforce:upsert>
+			</until-successful>
+		</foreach>
+		<logger level="INFO" doc:name="projects process is completed" doc:id="a2f358c9-4b13-4f66-9418-b963776abb5d" message='#["projects process is completed..."]' />
+		<flow-ref doc:name="helioscope_Designsdelta flow from project Flow Reference" doc:id="e834eb0f-5c33-4022-9ecc-e8621f9ca847" name="helioscope_projectdelta"/>
+	</flow>
+
+
+	<flow name="helioscope_Designs"
+		doc:id="54e97284-fea9-4efa-9b22-160064de3766">
+		<!-- Transform payload to extract project_id as vars.id -->
+		<logger level="INFO" doc:name="Design flow started" doc:id="56a01423-f121-4e0e-a934-6f6a078844f3" message='#["Design flow started"]'/>
+		<ee:transform doc:name="Transform Message"
+			doc:id="28886fcd-1f07-4112-b4f0-204e540d7982">
+			<ee:variables>
+				<ee:set-variable variableName="id"><![CDATA[%dw 2.0
+output application/json
+---
+payload.helioscope_project_api_id__c
+                ]]>
+				</ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+
+		<!-- Iterate over the array of project IDs in vars.id -->
+		<logger level="INFO" doc:name="projectId logger" doc:id="3fd3d212-306f-40fb-8d85-6dfb1e4a41ef" message='#["calling designs with projectId :" ++ (vars.id default "null")]'/>
+		<until-successful maxRetries="5" doc:name="Until Successful" doc:id="c1d86bb8-9c21-4268-a18d-dc6eab85caeb">
+				<!-- HTTP Request to fetch designs based on project_id -->
+				<http:request method="GET" doc:name="Helioscope api request to get designs" doc:id="74a9cfa9-7fb3-445e-8cac-a187a50e7ae2" config-ref="HTTP_Request_configuration" path='#[("/designs?project_id=") ++ (vars.id)]' doc:description="The helioscope_project_api_id needs to lookup in Salesforce the project and store the project relationship ID." responseTimeout="600000">
+
+					<!-- Include headers correctly -->
+					<reconnect />
+				<http:headers><![CDATA[#[{
+							"access_token": "${secure::helioscope.access_token}"
+					}]]]>
+                </http:headers>
+				</http:request>
+			</until-successful>
+		<set-variable value="#[payload]" doc:name="Set designResponse" doc:id="60c7ee9e-de6f-4c55-9f7d-d4642ca887c2" variableName="designResponse"/>
+		<ee:transform doc:name="Transform Message" doc:id="37ff20ed-f674-40e1-869b-b9b852a2db6c" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="resp" ><![CDATA[%dw 2.0
+output application/json
+//var design = (payload orderBy $.created ) orderBy $.last_modified [-1 to 0]
+var design = payload
+
+//var wiringzones =  keysOf(payload.field_component_metadata.wiring_zones)
+---
+design map {
+   helioscope_design_api_id__c: $.design_id as String, 
+   helioscope_project_api_id__r: {
+       helioscope_project_api_id__c: $.project_id as String
+   },
+    AC_Nameplate__c: $.field_component_metadata.ac_nameplate as String default "N/A",
+    DC_Nameplate__c: $.field_component_metadata.nameplate as String default "N/A",
+    DesignPNG_URL__c: $.render_url,
+   // DXF_URL__c: $.dxf_export_file_id,
+    Name: $.description,
+   DesignCreatorID__c: $.creator_id as String,
+   DesignCreatedDate__c: if ($.created != null) $.created else null,
+    DesignLastModifiedDate__c: if ($.last_modified != null) $.last_modified else null,
+    LastModifiedByUser__c: $.last_modified_by_user.full_name,
+    wiring_zones : $.field_component_metadata.wiring_zones,
+    "fieldSegments" : keysOf($.field_component_metadata.field_segments default {}) 
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<foreach doc:name="For Each" doc:id="5f9f9c25-491a-419a-b830-abfeb6d1a462" collection='#[%dw 2.0&#10;output application/json skipNullOn="everywhere"&#10;---&#10;vars.resp]'>
+			<set-variable value="#[payload]" doc:name="Set designPayload" doc:id="eae37c00-341f-4425-af81-1776e7809e15" variableName="designPayload"/>
+			<set-variable value="#[[]]" doc:name="Set FieldSegmentArray" doc:id="78a4bba6-7587-4367-b100-c58c4fb7a5c5" variableName="FieldSegmentArray"/>
+			<foreach doc:name="For Each" doc:id="57170c16-a51a-46c6-9991-d4ccab4f73bc" collection="#[payload.fieldSegments]">
+				<until-successful maxRetries="5" doc:name="Until Successful" doc:id="1aa0d37e-35f0-4d3a-95f7-298edf2fa78a">
+					<http:request method="GET" doc:name="Helioscope api request to get fieldsegements" doc:id="1d504f9f-bf45-4478-9167-70451e69ac12" doc:description="The helioscope_project_api_id needs to lookup in Salesforce the project and store the project relationship ID." config-ref="HTTP_Request_configuration" path='#["/field_segments/" ++ payload]' responseTimeout="60000">
+					<http:headers><![CDATA[#[{
+							"access_token": "${secure::helioscope.access_token}"
+					}]]]></http:headers>
+				</http:request>
+			</until-successful>
+				<set-variable value="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;  alignment : payload.alignment,&#10;  azimuth : payload.azimuth,&#10;  area : payload.data.area,&#10;  frames : payload.data.frames,&#10;  modules : payload.data.modules,&#10;  power : payload.data.power,&#10;  description : payload.description,&#10;  field_segment_id  : payload.field_segment_id&#10;}]" doc:name="Set fieldSegmentResponse" doc:id="d42e7f73-3841-4056-b47f-005d9d7055e3" variableName="fieldSegmentResponse" />
+				<set-variable value="#[%dw 2.0&#10;output application/json&#10;---&#10;vars.FieldSegmentArray ++ [vars.fieldSegmentResponse]]" doc:name="adding FieldSegmentResponse to Array" doc:id="824b1a4d-7cce-4453-b594-1019ed692908" variableName="FieldSegmentArray" />
+				<remove-variable doc:name="Remove fieldSegmentResponse" doc:id="edefb220-85c6-4ab1-857a-32ccee0bc8fa" variableName="fieldSegmentResponse" />
+				<logger level="INFO" doc:name="designPayload after adding fieldSegment of individual design" doc:id="dc7b4fa0-36d1-4381-b037-7f187607d040" message="#[vars.designPayload]" />
+			</foreach>
+			<set-variable value='#[%dw 2.0&#10;output application/json&#10;---&#10;((vars.designPayload - "fieldSegments") ++ {"feildSegmentData "  : [  vars.FieldSegmentArray ] })]' doc:name="add fieldSegmentsArray to designPayload" doc:id="77a520c8-652f-4ad7-8c6f-4548c302d63a" variableName="designPayload" />
+			<remove-variable doc:name="Remove FieldSegmentArray" doc:id="0cf27183-7d90-49a0-819b-8476a610ed38" variableName="FieldSegmentArray"/>
+			<ee:transform doc:name="Transform Message" doc:id="8502a9d6-3262-432c-8196-f0e843ed593d">
+				<ee:message>
+				</ee:message>
+				<ee:variables>
+					<ee:set-variable variableName="design"><![CDATA[%dw 2.0
+output application/java
+---
+ [{
+    helioscope_design_api_id__c: vars.designPayload.helioscope_design_api_id__c as String, 
+   helioscope_project_api_id__r: vars.designPayload.helioscope_project_api_id__r,
+    AC_Nameplate__c: vars.designPayload.AC_Nameplate__c as String default "N/A",
+    DC_Nameplate__c: vars.designPayload.DC_Nameplate__c as String default "N/A",
+    DesignPNG_URL__c: vars.designPayload.DesignPNG_URL__c,
+    DXF_URL__c: vars.designPayload.DXF_URL__c default null,
+    Name: vars.designPayload.Name,
+   DesignCreatorID__c: vars.designPayload.DesignCreatorID__c as String,
+   DesignCreatedDate__c: vars.designPayload.DesignCreatedDate__c as DateTime as Date {format: "MM/dd/yyyy"}  default null,
+    DesignLastModifiedDate__c: vars.designPayload.DesignLastModifiedDate__c as DateTime as Date {format: "MM/dd/yyyy"} default null,
+    LastModifiedByUser__c: vars.designPayload.LastModifiedByUser__c,
+   design_data_json__c: write(vars.designPayload, "application/json")
+}]
+]]></ee:set-variable>
+				</ee:variables>
+			</ee:transform>
+			<remove-variable doc:name="Remove designPayload" doc:id="fbc525d6-2d88-4e5f-8455-3e642ae22b4b" variableName="designPayload"/>
+			<until-successful maxRetries="5" doc:name="Until Successful" doc:id="1682ad40-8dee-491c-97e4-a77871e7c62e">
+					<salesforce:upsert doc:name="Upsert designs into salesforce" doc:id="320f3a0c-0ac5-4188-88bc-7e81c3ee0071" config-ref="Salesforce_Config" objectType="Helioscope_Design__c" externalIdFieldName="helioscope_design_api_id__c">
+					<salesforce:records ><![CDATA[#[vars.design]]]></salesforce:records>
+					</salesforce:upsert>
+				</until-successful>
+			<logger level="INFO" doc:name="Logger" doc:id="92af38ca-62f3-4430-bc82-acd5c08fc9df" />
+		</foreach>
+
+		<!-- Transform the design data -->
+
+		<!-- Iterate through transformed design data and upsert to Salesforce -->
+
+		<!-- Log after processing -->
+		<logger level="INFO" doc:name="Design flow ended"
+			doc:id="bdbf7990-f16a-4130-b00e-6caf989a289e" message='#["Design flow ended"]'/>
+	</flow>
+	<flow name="helioscope_project_delta" doc:id="90244b35-fde7-44f8-9242-253293897b00" >
+		<logger level="INFO" doc:name="Logger" doc:id="6864c692-aeb1-462d-9e7e-d782a4902e94" />
+		<logger level="INFO" doc:name="projects process is started" doc:id="16cf1395-c673-4f34-9b4c-76d0f2151a7c" message='#["Project Flow Started"]' />
+		<http:request method="GET" doc:name="Helioscope api request to get projects" doc:id="cd3e1396-f7af-495a-9457-04fd7d1c4109" config-ref="HTTP_Request_configuration" path="/projects?sort=last_modified%20desc&amp;include_archived=false&amp;limit=10" sendCorrelationId="AUTO" target="lastModifiedProjects">
+			<http:headers><![CDATA[#[output application/java
+					---
+					{
+					"access_token": "${secure::helioscope.access_token}"
+					}]]]></http:headers>
+		</http:request>
+		<http:request method="GET" doc:name="Helioscope api request to get projects1" doc:id="6039711d-7f61-4e42-9d99-b135c5c2e71b" config-ref="HTTP_Request_configuration" path="/projects?sort=created%20desc&amp;include_archived=true&amp;limit=10" sendCorrelationId="AUTO" target="lastCreatedProjects">
+			<http:headers><![CDATA[#[output application/java
+					---
+					{
+					"access_token": "${secure::helioscope.access_token}"
+					}]]]></http:headers>
+		</http:request>
+		<ee:transform doc:name="Transform Message" doc:id="9d357a95-2cfd-4ebe-bc0a-5de42be7d364">
+					<ee:message />
+					<ee:variables>
+						<ee:set-variable variableName="project"><![CDATA[%dw 2.0
+output application/java
+var data = (vars.lastModifiedProjects ++ vars.lastCreatedProjects) default []
+---
+data map {
+helioscope_project_api_id__c: $.project_id as String,
+Name: $.name,
+PreparedByEmail__c :  $.creator.email,
+DateHelioProjectCreated__c	: $.created as DateTime as Date {format: "MM/dd/yyyy"},
+helioscope_project_address__c: $.address,
+project_data_json__c: write($, "application/json")
+}]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+		<foreach doc:name="For Each to process 1 records at once" doc:id="19384b5e-492b-4d07-83d8-91c2a436ad54" collection="#[vars.project]">
+					<flow-ref doc:name="helioscope_Designs" doc:id="fd6afa14-9d5e-4d31-be47-b0a6887e2b75" name="helioscope_Designs" />
+			<!-- [STUDIO:"Until Successful"]<until-successful maxRetries="5" doc:name="Until Successful" doc:id="99bad021-054e-4878-bac0-0c4fcef9cd24" >
+						<salesforce:upsert objectType="Helioscope_Project__c" externalIdFieldName="helioscope_project_api_id__c" doc:name="Upsert projects into salesforce" doc:id="e41ad05b-68c2-4075-b71f-e314653ceee6" config-ref="Salesforce_Config" target="responsesf" />
+					</until-successful> [STUDIO] -->
+				</foreach>
+		<!-- [STUDIO:"Scatter-Gather"]<scatter-gather doc:name="Scatter-Gather" doc:id="f300e6eb-b87b-4505-b5d6-c461e35f0088" >
+			<route >
+				<until-successful maxRetries="5" doc:name="Until Successful" doc:id="748a1046-5036-4e92-83de-fe8610bc9874" >
+				</until-successful>
+				<ee:transform doc:name="Transform Message" doc:id="7ce2cf8e-7c9c-4142-bffe-30a389679519" >
+					<ee:message />
+					<ee:variables >
+						<ee:set-variable variableName="project" ><![CDATA[%dw 2.0
+output application/java
+&#45;&#45;-
+payload map {
+helioscope_project_api_id__c: $.project_id as String,
+Name: $.name,
+PreparedByEmail__c :  $.creator.email,
+DateHelioProjectCreated__c	: $.created as DateTime as Date {format: "MM/dd/yyyy"},
+helioscope_project_address__c: $.address,
+project_data_json__c: write($, "application/json")
+}
+					&#93;&#93;></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</route>
+			<route >
+				<until-successful maxRetries="5" doc:name="Until Successful" doc:id="1b944884-453e-429e-aede-0fe834d0c21b" >
+				</until-successful>
+				<foreach doc:name="For Each to process 200 records at once" doc:id="cc17b42e-4a50-4e1a-a0ce-3b87d4bce695" collection="#[vars.project&#93;" batchSize="200" >
+					<flow-ref doc:name="helioscope_Designs" doc:id="ad75b393-90ce-4e47-81e9-a9531f7abd2e" name="helioscope_Designs" />
+					<until-successful maxRetries="5" doc:name="Until Successful" doc:id="d647da80-0bde-4c9b-92e9-ea3a2a0a6d28" >
+						<salesforce:upsert objectType="Helioscope_Project__c" externalIdFieldName="helioscope_project_api_id__c" doc:name="Upsert projects into salesforce" doc:id="a59c3d1d-b7ff-40b1-bbde-ec70ae2f7d9c" config-ref="Salesforce_Config" target="responsesf" />
+					</until-successful>
+				</foreach>
+			</route>
+		</scatter-gather> [STUDIO] -->
+		<logger level="INFO" doc:name="projects process is completed" doc:id="53a7edb3-fefa-464d-ad04-077e63ea86cd" message='#["projects process is completed..."]' />
+	</flow>
+	<!-- [STUDIO:"helioscope_designs_delta"]<flow name="helioscope_designs_delta" doc:id="240a8d68-e659-44b3-be7d-c7c10344cced" >
+		<logger level="INFO" doc:name="Design flow started" doc:id="f4663a08-cfda-455c-8832-5716881a0e32" message='#["Design flow started"&#93;' />
+		<ee:transform doc:name="Transform Message" doc:id="3c6d0e46-1b8d-47a4-b537-0704da7d1b3f">
+			<ee:variables>
+				<ee:set-variable variableName="id"><![CDATA[%dw 2.0
+                output application/json
+                &#45;&#45;-
+                payload.project_id
+                &#93;&#93;></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<scatter-gather doc:name="Scatter-Gather" doc:id="45c7f9b5-61f9-4b03-a19f-a9e61732ebe3" >
+			<route >
+				<until-successful maxRetries="5" doc:name="Until Successful" doc:id="38330a4d-76b5-421b-ab36-08cd5ae65817" >
+					<http:request method="GET" doc:name="Helioscope api request to get designs" doc:id="14e91cb0-516b-4e50-8d68-70d8979783c7" doc:description="The helioscope_project_api_id needs to lookup in Salesforce the project and store the project relationship ID." config-ref="HTTP_Request_configuration" path="/designs/?sort=last_modified%20desc&amp;include_archived=false&amp;limit=20" responseTimeout="60000">
+			<http:headers><![CDATA[#[{
+							"access_token": "${secure::helioscope.access_token}"
+					}&#93;&#93;&#93;></http:headers>
+		</http:request>
+				</until-successful>
+				<ee:transform doc:name="Transform Message" doc:id="76bf5626-53a0-4598-b29e-6bd69b116da2" >
+					<ee:message />
+					<ee:variables >
+						<ee:set-variable variableName="design" ><![CDATA[%dw 2.0
+output application/java
+
+&#45;&#45;-
+payload map {
+    helioscope_design_api_id__c: $.design_id as String, 
+    helioscope_project_api_id__r: {
+        helioscope_project_api_id__c: $.project_id as String
+    },
+    AC_Nameplate__c: $.field_component_metadata.ac_nameplate as String default "N/A",
+    DC_Nameplate__c: $.field_component_metadata.nameplate as String default "N/A",
+    DesignPNG_URL__c: $.render_url,
+   // DXF_URL__c: $.dxf_export_file_id,
+    Name: $.description,
+    DesignCreatorID__c: $.creator_id as String,
+    DesignCreatedDate__c: if ($.created != null) $.created as DateTime as Date {format: "MM/dd/yyyy"} else null,
+    DesignLastModifiedDate__c: if ($.last_modified != null) $.last_modified as DateTime as Date {format: "MM/dd/yyyy"} else null,
+    LastModifiedByUser__c: $.last_modified_by_user.full_name,
+    design_data_json__c: write($, "application/json")
+}
+&#93;&#93;></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+				<foreach doc:name="For Each" doc:id="0da18b60-39f1-42b5-a1ca-170af00db880" collection="#[vars.design&#93;" batchSize="200">
+					<until-successful maxRetries="5" doc:name="Until Successful" doc:id="4a448920-8a22-4ab5-94b3-62cbcc3e68ad">
+					<salesforce:upsert objectType="Helioscope_Design__c" externalIdFieldName="helioscope_design_api_id__c" doc:name="Upsert designs into salesforce" doc:id="a9a95875-d736-4e90-93a7-dcdbb2affe4f" config-ref="Salesforce_Config" />
+				</until-successful>
+				</foreach>
+			</route>
+			<route >
+				<until-successful maxRetries="5" doc:name="Until Successful" doc:id="96d6ee4b-8b88-4ad3-91ad-53d7a7c31504" >
+					<http:request method="GET" doc:name="Helioscope api request to get designs" doc:id="80a17d8f-918b-4846-a054-c44f66c9d748" doc:description="The helioscope_project_api_id needs to lookup in Salesforce the project and store the project relationship ID." config-ref="HTTP_Request_configuration" path="/designs/?sort=created%20desc&amp;include_archived=true&amp;limit=20" responseTimeout="60000">
+			<http:headers><![CDATA[#[{
+							"access_token": "${secure::helioscope.access_token}"
+					}&#93;&#93;&#93;></http:headers>
+		</http:request>
+				</until-successful>
+				<ee:transform doc:name="Transform Message" doc:id="4c9530b0-bd77-4c10-a584-754cab38a869" >
+					<ee:message />
+					<ee:variables >
+						<ee:set-variable variableName="design" ><![CDATA[%dw 2.0
+output application/java
+
+&#45;&#45;-
+payload map {
+    helioscope_design_api_id__c: $.design_id as String, 
+    helioscope_project_api_id__r: {
+        helioscope_project_api_id__c: $.project_id as String
+    },
+    AC_Nameplate__c: $.field_component_metadata.ac_nameplate as String default "N/A",
+    DC_Nameplate__c: $.field_component_metadata.nameplate as String default "N/A",
+    DesignPNG_URL__c: $.render_url,
+  //  DXF_URL__c: $.dxf_export_file_id,
+    Name: $.description,
+    DesignCreatorID__c: $.creator_id as String,
+    DesignCreatedDate__c: if ($.created != null) $.created as DateTime as Date {format: "MM/dd/yyyy"} else null,
+    DesignLastModifiedDate__c: if ($.last_modified != null) $.last_modified as DateTime as Date {format: "MM/dd/yyyy"} else null,
+    LastModifiedByUser__c: $.last_modified_by_user.full_name,
+    design_data_json__c: write($, "application/json")
+}
+&#93;&#93;></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+				<foreach doc:name="For Each" doc:id="42a7635d-305c-4d67-b64f-0bf44f697513" collection="#[vars.design&#93;" batchSize="200">
+					<until-successful maxRetries="5" doc:name="Until Successful" doc:id="16de3868-cad1-43d7-b05c-142e15ec6c09">
+					<salesforce:upsert objectType="Helioscope_Design__c" externalIdFieldName="helioscope_design_api_id__c" doc:name="Upsert designs into salesforce" doc:id="2c9e8d2c-c732-4992-b4bb-8fa7c90957c5" config-ref="Salesforce_Config" />
+				</until-successful>
+				</foreach>
+			</route>
+		</scatter-gather>
+		<logger level="INFO" doc:name="Design flow ended" doc:id="074af409-6b8a-4c3a-90d7-8ce65449feb1" message='#["Design flow ended"&#93;' />
+	</flow> [STUDIO] -->
+
+</mule>
