@@ -1,0 +1,14 @@
+#staging and dev new Oauth2 flow
+salesforce:
+  #userName: "![RFLd0vrpWa438fWVXCWKgbJYdI72W9iVlnoi4HWt5kM=]"
+  #password: "![cz6WL+QEAdM/GikQuuTmng==]"
+  #securityToken : "![XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX]"
+  #client id and secret below for new Oauth 2 flo2 10/7/24
+  
+  clientid: "![83qSsIN4sxR4uPT4rMaGu1nT/LwOpHMQ+KUaTh/T7lxQg0UV3j0RFI7OjYaEkl558bsFcyoGvhUgJfH0MYZf8Zj2qHDUKsNa2HvI9qXMJmmg2TPuVpGSATzp/nR5by3J]"
+  secret: "![HQczY/rdhtVwgQfKYL6sHce6H591mGrroxAPoJlw27DDrKwOIBc0yzB48jSTWrnVMJgUwbVGFfYIPIfJKtAdv41VfZdjBgDBiPI4ggH4kwM=]"
+  
+  
+helioscope:
+  access_token: "![GpBZNt927QP9zSt1x1Z14hN6SlDeEXix6l832eU40tY=]"
+  helioscope.access_token: "![GpBZNt927QP9zSt1x1Z14hN6SlDeEXix6l832eU40tY=]"
